@@ -2,6 +2,7 @@ import { open } from 'node:fs/promises';
 import { basename, extname, resolve } from 'node:path';
 import { AutomationError, requireValue } from '../../core/errors.js';
 import { networkFetch } from '../../core/network.js';
+import { generateTranscriptPdf } from '../../generator/transcript.js';
 
 const MAX_BYTES = 20 * 1024 * 1024; // Buffering limit, not a claim about a program's upload limit.
 
@@ -107,11 +108,51 @@ async function readRemoteDocument(source, { signal, timeoutMs = 120000 } = {}) {
   }
 }
 
+function isLoopbackDocumentUrl(value) {
+  try {
+    const url = new URL(value);
+    const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
+    return loopback && (url.pathname === '/api/document' || url.pathname === '/api/transcript');
+  } catch {
+    return false;
+  }
+}
+
+async function generateDirectlyFromUrl(value, options = {}) {
+  const url = new URL(value);
+  const nameParam = (url.searchParams.get('name') ?? '').trim();
+  const parts = nameParam ? nameParam.split(/\s+/) : [];
+  const firstName = parts[0] || 'Gary';
+  const lastName = parts.slice(1).join(' ') || 'Porter';
+  const univParam = url.searchParams.get('univ');
+  const result = await generateTranscriptPdf({
+    firstName,
+    lastName,
+    universityKey: univParam,
+    signal: options.signal,
+  });
+  return {
+    bytes: result.bytes,
+    mimeType: 'application/pdf',
+    fileSize: result.fileSize,
+    fileName: result.fileName,
+  };
+}
+
 export async function readDocument(source, options = {}) {
   options.signal?.throwIfAborted();
   if (typeof source === 'string') return readLocalDocument(source, options.signal);
   requireValue(source && !(source.path !== undefined && source.url !== undefined), '只能指定一种材料来源');
-  if (source.url !== undefined) return readRemoteDocument(source.url, options);
+  if (source.url !== undefined) {
+    try {
+      return await readRemoteDocument(source.url, options);
+    } catch (error) {
+      if (isLoopbackDocumentUrl(source.url) && !options.signal?.aborted) {
+        return await generateDirectlyFromUrl(source.url, options);
+      }
+      throw error;
+    }
+  }
   return readLocalDocument(source.path, options.signal);
 }
 

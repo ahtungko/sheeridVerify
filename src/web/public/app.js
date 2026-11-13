@@ -40,11 +40,11 @@ function activity(record) {
   }
   if (record.event === 'stage_started') {
     const text = { launch: '准备提交资料中', fill: '准备提交资料中', submit: '提交资料中',
-      document: '等待上传文件', read_document: '等待上传文件', cancel_sso: '等待上传文件',
-      initiate_upload: '等待上传文件', upload_bytes: '等待上传文件' }[record.stage];
+      document: '自动生成并准备上传材料', read_document: '从生成器自动生成成绩单', cancel_sso: '切换至材料验证流程',
+      initiate_upload: '申请材料上传通道', upload_bytes: '正在上传成绩单文件' }[record.stage];
     return text ? { text } : null;
   }
-  if (record.event === 'stage_completed' && record.stage === 'upload_bytes') return { text: '文件已上传' };
+  if (record.event === 'stage_completed' && record.stage === 'upload_bytes') return { text: '成绩单材料已上传' };
   if (['waiting_for_review', 'verification_status'].includes(record.event)) {
     if (record.code === 'AWAITING_WRITE_CONFIRMATION') return { text: '等待确认提交结果' };
     if (record.currentStep === 'emailLoop') return { text: '等待完成邮件验证' };
@@ -299,6 +299,29 @@ $('#random-fill').addEventListener('click', () => {
   field('birthDate').value = randomBirthDate();
   updateControls();
 });
+$('#preview-doc')?.addEventListener('click', () => {
+  const fn = field('firstName').value.trim() || 'Gary';
+  const ln = field('lastName').value.trim() || 'Porter';
+  const univ = $('#university-preset')?.value || 'ohio';
+  window.open(`/api/document?name=${encodeURIComponent(fn + ' ' + ln)}&univ=${encodeURIComponent(univ)}`, '_blank');
+});
+$('#university-preset')?.addEventListener('change', async () => {
+  try {
+    await api('/api/presets/select', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: $('#university-preset').value }),
+    });
+  } catch (err) {
+    error('切换学校预设失败: ' + err.message);
+  }
+});
+async function loadPresets() {
+  try {
+    const data = await api('/api/presets');
+    if (data.current && $('#university-preset')) $('#university-preset').value = data.current;
+  } catch {}
+}
 $('#cancel').addEventListener('click', () => taskAction('cancel'));
 $('#resume').addEventListener('click', () => taskAction('resume'));
 $('#delete').addEventListener('click', () => taskAction('delete'));
@@ -313,6 +336,7 @@ function connect() {
       setConn('ok', '服务已连接');
       error();
       updateControls();
+      void loadPresets();
       requestPoll();
       return true;
     } catch (reason) {

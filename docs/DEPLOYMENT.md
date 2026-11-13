@@ -73,6 +73,9 @@ cp -n deploy/.env.web.example .env.web
 chmod 600 .env.web
 ```
 
+> **自动化成绩单生成说明**：
+> 项目已内置官方成绩单生成器（位于 `src/generator/templates/`），支持 7 所大学模板。在流程遇到 `docUpload` 时会自动生成对应学校的 PDF 并上传。Linux 环境若未安装 Chromium/Chrome，可运行 `npx playwright install chromium` 或 `sudo apt-get install -y chromium`，系统会自动调用并导出 PDF。
+
 编辑应用配置与 `.env.web`，不要覆盖已有凭据。Instabox 公网端口入口使用：
 
 ```dotenv

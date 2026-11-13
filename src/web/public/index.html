@@ -8,7 +8,25 @@
   <div class="workspace">
     <form id="task-form" autocomplete="off">
       <fieldset id="form-fields">
-        <section class="card"><div class="section-title"><h2>验证任务</h2><button id="random-fill" type="button" class="secondary small">随机填充</button></div>
+        <section class="card">
+          <div class="section-title">
+            <h2>验证任务</h2>
+            <div style="display:flex;gap:8px;">
+              <button id="preview-doc" type="button" class="secondary small" title="实时生成并预览当前大学的官方成绩单 PDF">预览成绩单</button>
+              <button id="random-fill" type="button" class="secondary small">随机填充</button>
+            </div>
+          </div>
+          <label>学校预设 · University Preset (自动出具成绩单)
+            <select id="university-preset" name="universityPreset">
+              <option value="ohio" selected>Ohio University (ohio.edu)</option>
+              <option value="umich">University of Michigan (umich.edu)</option>
+              <option value="uw">University of Washington (uw.edu)</option>
+              <option value="purdue">Purdue University (purdue.edu)</option>
+              <option value="ufl">University of Florida (ufl.edu)</option>
+              <option value="psu">Pennsylvania State University (psu.edu)</option>
+              <option value="marshall">Marshall University (marshall.edu)</option>
+            </select>
+          </label>
           <label>验证链接<input name="url" type="url" required placeholder="粘贴包含 verificationId 的完整验证链接"></label>
           <div class="grid"><label>名 · First name<input name="firstName" required maxlength="150"></label><label>姓 · Last name<input name="lastName" required maxlength="150"></label></div>
           <label>出生日期<input name="birthDate" type="date" required min="1900-01-01"></label>
@@ -18,7 +36,7 @@
         <div class="actions"><button id="start" type="submit" class="primary" disabled>加入队列</button><button type="reset" class="secondary">清空表单</button></div>
       </fieldset>
       <p id="form-error" class="error" role="alert" hidden></p>
-      <p class="privacy">其余设置使用配置文件，代理留空时直连。</p>
+      <p class="privacy">内置材料生成器：当验证需要证明材料时，系统将自动生成对应学校的官方成绩单 PDF 并上传。代理留空时直连。</p>
     </form>
     <aside class="progress card"><div class="progress-heading"><h2>运行进度</h2><span id="job-state" class="badge">待开始</span></div>
       <p id="queue-summary" class="hint">正在读取队列</p>

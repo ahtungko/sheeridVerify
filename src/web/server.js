@@ -1,11 +1,12 @@
 import { createServer } from 'node:http';
 import { randomBytes, createHash, timingSafeEqual } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { AutomationError, requireValue } from '../core/errors.js';
 import { WebJobs } from './jobs.js';
 import { isMainModule } from '../../scripts/process.js';
+import { generateTranscriptPdf, UNIVERSITIES, matchUniversity } from '../generator/transcript.js';
 
 const assets = new Map([
   ['/', ['index.html', 'text/html; charset=utf-8']],
@@ -76,6 +77,32 @@ export function createWebServer({ port = 8787, host = '127.0.0.1', publicOrigin,
       response.end(await readFile(new URL(`./public/${filename}`, import.meta.url)));
       return;
     }
+    const isDocumentRoute = request.method === 'GET' && (url.pathname === '/api/document' || url.pathname === '/api/transcript');
+    if (isDocumentRoute) {
+      let nameParam = (url.searchParams.get('name') ?? '').trim();
+      let parts = nameParam ? nameParam.split(/\s+/) : [];
+      let firstName = parts[0] || 'Gary';
+      let lastName = parts.slice(1).join(' ') || 'Porter';
+      let birthDate = (url.searchParams.get('birthDate') ?? '2001-05-18').trim();
+
+      let univParam = url.searchParams.get('univ');
+      if (!univParam) {
+        try {
+          const cfg = await jobs.readConfig();
+          univParam = cfg.data?.organization?.name || cfg.data?.organization?.emailDomain || cfg.emailDomain;
+        } catch { /* use default */ }
+      }
+      const universityKey = matchUniversity(univParam);
+      const doc = await generateTranscriptPdf({ firstName, lastName, birthDate, universityKey });
+      response.writeHead(200, {
+        'Content-Type': 'application/pdf',
+        'Content-Length': doc.fileSize,
+        'Content-Disposition': `inline; filename="${doc.fileName}"`,
+        'Cache-Control': 'no-store',
+      });
+      response.end(doc.bytes);
+      return;
+    }
     const cookie = (request.headers.cookie ?? '').split(';').map(item => item.trim())
       .find(item => item.startsWith('one-session='))?.slice('one-session='.length) ?? '';
     const passwordValid = timingSafeEqual(expectedPassword, digest(request.headers['x-web-password'] ?? ''));
@@ -92,6 +119,41 @@ export function createWebServer({ port = 8787, host = '127.0.0.1', publicOrigin,
     }
     if (request.method === 'GET' && url.pathname === '/api/jobs') {
       json(response, 200, jobs.list());
+      return;
+    }
+    if (request.method === 'GET' && url.pathname === '/api/presets') {
+      let currentUniv = 'ohio';
+      try {
+        const cfg = await jobs.readConfig();
+        currentUniv = matchUniversity(cfg.data?.organization?.name || cfg.data?.organization?.emailDomain);
+      } catch {}
+      json(response, 200, { current: currentUniv, presets: UNIVERSITIES });
+      return;
+    }
+    if (request.method === 'POST' && url.pathname === '/api/presets/select') {
+      requireValue(request.headers['content-type']?.split(';')[0] === 'application/json', '请求需要 JSON 格式');
+      let body;
+      try { body = JSON.parse((await readBody(request, 8 * 1024)).toString('utf8')); }
+      catch { throw new AutomationError('INVALID_CONFIG', '内容不是有效 JSON'); }
+      const key = matchUniversity(body?.key);
+      const target = UNIVERSITIES[key];
+      try {
+        const raw = await jobs.readConfig();
+        raw.data = raw.data ?? {};
+        raw.data.country = target.country;
+        raw.data.organization = {
+          name: target.name,
+          optionText: target.optionText,
+          emailDomain: target.emailDomain,
+        };
+        if (!raw.document?.path && !raw.document?.url) {
+          raw.document = { path: '', url: `http://127.0.0.1:${server.address().port}/api/document` };
+        }
+        await writeFile(configFile, JSON.stringify(raw, null, 2) + '\n', 'utf8');
+      } catch (e) {
+        throw new AutomationError('PRESET_UPDATE_FAILED', '保存预设到配置文件失败: ' + e.message);
+      }
+      json(response, 200, { success: true, key, university: target });
       return;
     }
     if (request.method === 'POST' && url.pathname === '/api/jobs') {

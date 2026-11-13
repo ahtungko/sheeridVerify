@@ -1,6 +1,7 @@
 import { createServer } from 'node:http';
 import { randomBytes, createHash, timingSafeEqual } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { AutomationError, requireValue } from '../core/errors.js';
@@ -226,7 +227,30 @@ function json(response, status, value) {
   response.end(JSON.stringify(value));
 }
 
+function loadDotEnv(filepath) {
+  if (!existsSync(filepath)) return;
+  try {
+    const lines = readFileSync(filepath, 'utf8').split(/\r?\n/);
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+      if (!line || line.startsWith('#')) continue;
+      const idx = line.indexOf('=');
+      if (idx <= 0) continue;
+      const key = line.slice(0, idx).trim();
+      let val = line.slice(idx + 1).trim();
+      if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+        val = val.slice(1, -1);
+      }
+      if (process.env[key] === undefined) {
+        process.env[key] = val;
+      }
+    }
+  } catch {}
+}
+
 if (isMainModule(import.meta.url)) {
+  loadDotEnv(resolve('.env.web'));
+  loadDotEnv(resolve('.env'));
   const { values } = parseArgs({ options: { port: { type: 'string', default: '8787' } } });
   const port = Number(values.port);
   if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error('端口必须为 1024–65535 的整数');
